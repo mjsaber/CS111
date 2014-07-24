@@ -1,0 +1,36 @@
+Jun Ma 704149452
+Liyizhi Kou 603941415
+
+7/16/2013 lab1
+ 
+1. First of all, we add subshell parse feature by using recurrsion.
+   However, we found out that when we test the -p option in lnxsrv,
+   it actually print out some unreadable characters for only first line of command
+   But problem disappear in our local machine. We guess that it's about memory size and performance
+   differences in our local machine and lnxsrv machines.
+
+2. Another bug we found is that the file which fetch into ./timetrash -p command cannot large than 1024
+   Otherwise there are some strange characters appears.
+
+3. the main algorithm we use in lab1b is recurrsion. It's pretty straightforward.
+   In subshell type, we redo the input and output situation.
+   In seq type, we return only he most right command's exit status.
+   In very last, we use orginal fd to overwrite the stdin and stdout to make sure that
+   when enter a type that is compounded command (which contained pipe) happened,
+   it clean's stdin and stdout so that following command who read from stdin won't be affect by result from the pipe.
+
+4. We also encounter a problem that when output to a file, we cannot write into it.
+   However it does not happen couple days before. Fornuately, we fix it by manually set permission to "0644"
+   in open() function, which we did not do before.
+
+
+
+
+lab1a:
+on the part we parse the input into command
+we assign priority to each operator such as '|' '&&' '||'
+so program will switch the command component to fill the priority, ex a&&b | c
+And we do not implement subshell functionality
+
+
+

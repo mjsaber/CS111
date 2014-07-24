@@ -1,0 +1,644 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- saved from url=(0060)http://www.lasr.cs.ucla.edu/vahab/cs111/labs/lab2/lab2_.html -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" dir="ltr" lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <title>
+    Lab2 CS111
+  </title>
+
+  <meta name="generator" content="DokuWiki">
+<meta name="robots" content="index,follow">
+<meta name="date" content="2011-02-04T09:54:26-0800">
+<meta name="keywords" content="lab2">
+<link rel="search" type="application/opensearchdescription+xml" href="http://www.read.cs.ucla.edu/111/lib/exe/opensearch.php" title="CS111">
+<link rel="start" href="http://www.read.cs.ucla.edu/111/">
+<link rel="contents" href="http://www.read.cs.ucla.edu/111/lab2?do=index" title="Sitemap">
+<link rel="alternate" type="application/rss+xml" title="Recent Changes" href="http://www.read.cs.ucla.edu/111/feed.php">
+<link rel="alternate" type="application/rss+xml" title="Current Namespace" href="http://www.read.cs.ucla.edu/111/feed.php?mode=list&ns=">
+<link rel="alternate" type="text/html" title="Plain HTML" href="http://www.read.cs.ucla.edu/111/_export/xhtml/lab2">
+<link rel="alternate" type="text/plain" title="Wiki Markup" href="http://www.read.cs.ucla.edu/111/_export/raw/lab2">
+<link rel="canonical" href="http://www.read.cs.ucla.edu/111/lab2">
+<link rel="stylesheet" media="screen" type="text/css" href="./Lab2 CS111_files/css.css">
+<link rel="stylesheet" media="all" type="text/css" href="./Lab2 CS111_files/css_002.css">
+<link rel="stylesheet" media="print" type="text/css" href="./Lab2 CS111_files/css_003.css">
+<script type="text/javascript"><!--//--><![CDATA[//><!--
+var NS='';var JSINFO = {"id":"lab2","namespace":""};
+//--><!]]></script><style type="text/css"></style>
+<script type="text/javascript" charset="utf-8" src="./Lab2 CS111_files/js.php"></script><style type="text/css" media="screen"><!--/*--><![CDATA[/*><!--*/ .folded.hidden { display: none; } .folder .indicator { visibility: visible; } /*]]>*/--></style><style type="text/css" media="screen"><!--/*--><![CDATA[/*><!--*/ .folded.hidden { display: none; } .folder .indicator { visibility: visible; } /*]]>*/--></style>
+
+  <link rel="shortcut icon" href="http://www.read.cs.ucla.edu/111/lib/tpl/osp/images/favicon.ico">
+
+  </head>
+
+<body>
+<div class="dokuwiki">
+  
+  <div class="stylehead">
+
+    <div class="header">
+
+    </div>
+
+
+    
+
+    
+    
+    <div class="clearer"></div>
+  </div>
+  
+  
+  <div class="page">
+    <!-- wikipage start -->
+    <!-- TOC START -->
+
+<h1><a name="lab-2" id="lab-2">Lab 2</a></h1>
+
+<h2><a name="overview" id="overview">Overview</a></h2>
+<div class="level2">
+
+<p>
+
+In Lab 2, you'll write a Linux <em><a href="http://en.wikipedia.org/wiki/Kernel_module" class="urlextern" title="http://en.wikipedia.org/wiki/Kernel_module" rel="nofollow">kernel module</a></em>
+that implements a <strong>ramdisk</strong>: an in-memory block device. (A block device is basically a device that acts like a disk, supporting
+<em>random-access</em> read and write operations of fixed-sized units called <em>sectors</em>.  Random-access means the disk can read or write sectors in any order -- unlike a pipe, for example.)
+</p>
+
+<p>
+Your ramdisk will support the usual <strong>read</strong> and <strong>write</strong> operations.
+You can read and write the ramdisk by reading and writing a file, for instance
+one named <code>/dev/osprda</code>. (You could also initialize your
+ramdisk to contain a Linux file system!)  Your ramdisk will also support a
+special <strong>read/write locking</strong> feature, where a process can gain exclusive access to the ramdisk.
+This, of course, leads to some interesting synchronization issues.
+</p>
+
+<p>
+Like most device drivers, your module can support several of these devices
+simultaneously; in particular, it supports four simultaneous ramdisks.
+</p>
+
+<p>
+This lab has a handful of purposes, including:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> To introduce you to kernel programming.</div>
+</li>
+<li class="level1"><div class="li"> To give you experience in writing a 
+device driver for a real operating system. (Although you don't have to 
+implement any interaction with real hardware controllers.)</div>
+</li>
+<li class="level1"><div class="li"> To give you some interesting synchronization problems to handle.</div>
+</li>
+</ul>
+
+<p>
+
+This lab <em>requires</em> that you use the <a href="http://www.read.cs.ucla.edu/111/qemu" class="wikilink1" title="qemu">QEMU</a> virtual machine environment running a special Linux 2.6.18 image.
+(While you can do the lab on a real Linux 2.6.18 computer, we don't recommend it.)
+The SEASnet Linux servers, Linux lab, and CS 111 Ubuntu distribution have been set up with QEMU.
+</p>
+
+</div>
+
+<h2><a name="lab-materials" id="lab-materials">Lab materials</a></h2>
+<div class="level2">
+
+<p>
+
+The skeleton code you will get for this lab consists of:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> a <code>Makefile</code></div>
+</li>
+<li class="level1"><div class="li"> two module source files (<code>osprd.c</code> and <code>osprd.h</code>)</div>
+</li>
+<li class="level1"><div class="li"> the source code for a utility to read and write a ramdisk (optionally locked) (<code>osprdaccess.c</code>)</div>
+</li>
+<li class="level1"><div class="li"> a header file implementing the instrumented locking code described below (<code>spinlock.h</code>)</div>
+</li>
+<li class="level1"><div class="li"> a script for running in Qemu on Linux (<code>run-qemu</code>) and a helper script that is run in the Qemu environment (<code>setup-in-qemu</code>)</div>
+</li>
+<li class="level1"><div class="li"> a simple tester for some (NOT ALL) Lab 2 functionality (<code>lab2-tester.pl</code>)</div>
+</li>
+</ul>
+
+<p>
+
+When you extract <code>lab2.tar.gz</code> you will get a directory <code>lab2</code>
+which contains these files. Since you will be using Linux for this lab, the
+command <code>tar xvzf lab2.tar.gz</code> will suffice to extract the archive.
+</p>
+
+</div>
+
+<h2><a name="writing-kernel-code" id="writing-kernel-code">Writing kernel code</a></h2>
+<div class="level2">
+
+<p>
+
+Writing kernel code isn't actually that scary. The Linux kernel is a
+very large piece of software, but you only have to use a small
+subset for your module.  Remember that the kernel is providing the
+abstractions we usually take for granted in userspace, so often it cannot take
+advantage of them itself (sort of a chicken-and-egg thing).
+</p>
+
+<p>
+Each process in Linux has its own <em>kernel stack</em>:
+While the kernel is executing on behalf of a process, it uses a stack 
+which is
+specific to that process.  This is convenient, because kernel code 
+running on behalf of a process can "block" similar to user code.
+(Contrast this with WeensyOS 1, the MiniprocOS, where processes could 
+not block in the kernel, and there was only one kernel stack.) 
+Linux kernel code must be prepared to handle interrupts and symmetric 
+multiprocessors without breaking.
+Opportunities for race conditions are rampant.  It is very important in 
+the kernel to use proper
+synchronization mechanisms like locks to avoid unpredictable behavior 
+and
+deadlocks. Otherwise the whole system can crash!
+</p>
+
+<p>
+In the lab skeleton code, we have
+instrumented the kernel's locks to help you detect incorrect lock usage 
+even on
+machines where incorrect use of the locks would go undetected.  However,
+ you won't be able to detect missing locks, so you'll have to think 
+carefully about where
+they will be necessary.
+</p>
+
+<p>
+Memory protection is also not the same as it is in userspace. In 
+userspace, if
+you follow a bad pointer, your program may be killed, but that's about 
+it. In
+the kernel, the kernel itself will likely crash.
+Even worse, userspace programs can pass invalid pointers into the kernel
+ through
+system calls. If the kernel dereferences such a pointer, the machine is 
+in
+trouble! To help the kernel protect itself against such abuses, there 
+are
+special kernel functions for dealing with userspace-supplied pointers in
+ a safe
+way.  You won't need to worry about these functions for this lab, but 
+they will become important in Lab 3.  You will find them, and other 
+useful kernel functions, documented <a href="http://www.read.cs.ucla.edu/111/lab2functions" class="wikilink1" title="lab2functions">here</a>.
+</p>
+
+<p>
+Finally, you can't call system calls like
+<code>open</code>, <code>read</code>, or <code>write</code> from inside the kernel. You are 
+<em>implementing</em> these functions for your block device; only user code can call them.
+</p>
+
+</div>
+
+<h2><a name="running-the-lab" id="running-the-lab">Running the Lab</a></h2>
+<div class="level2">
+
+<p>
+
+The hardest thing about real-life kernel programming is that bugs have very serious consequences -- often a reboot.
+Virtual machines and emulators can make this much much easier: a bug will stop the emulator, but not crash the whole computer.
+</p>
+
+<p>
+We expect you to complete this lab using a special Linux image we've setup for the <a href="http://www.read.cs.ucla.edu/111/qemu" class="wikilink1" title="qemu">QEMU</a> emulator.
+The lab skeleton code comes with a helpful script named <code>run-qemu</code> that will help you get started.
+On the Linux lab machines and on SEASnet's Linux servers (or your own Linux machine, once you've set it up <a href="http://www.read.cs.ucla.edu/111/qemu" class="wikilink1" title="qemu">according to our instructions</a>),
+simply type <code>./run-qemu</code>.  This will start the emulator and copy your current directory into the emulated environment.
+When the emulator comes up, it will say:
+</p>
+
+<p>
+<a href="http://www.read.cs.ucla.edu/111/_detail/run-qemu.gif?id=lab2" class="media" title="run-qemu.gif"><img src="./Lab2 CS111_files/run-qemu.gif" class="media" alt=""></a>
+</p>
+
+<p>
+Simply press Enter.  This will copy your lab2 directory into the 
+emulator, unpack it, compile the module, and install it.  Then you can 
+test it, using
+<code>./osprdaccess</code> commands as described below.  To run the <code>lab2-tester.pl</code> script we provide (which tests some, but not all, functionality), run
+
+</p>
+<pre class="code">./lab2-tester.pl</pre>
+
+<p>
+
+(or, equivalently, <code>make check</code>).  To run a particular test case (rather than all of the test cases), give the test case number:
+
+</p>
+<pre class="code">./lab2-tester.pl 15</pre>
+
+</div>
+
+<h2><a name="your-task" id="your-task">Your task</a></h2>
+<div class="level2">
+
+<p>
+
+To complete the lab you need to complete all <code>EXERCISE</code> sections in
+<code>osprd.c</code>.
+This section of the lab manual gives an overview of the exercises and related
+background knowledge.
+</p>
+
+<p>
+Your ramdisk will be a <em>block device</em>, meaning it will implement the
+Linux block device interface. Concretely:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> Block devices <strong>store data</strong>. They support read and write operations.</div>
+</li>
+<li class="level1"><div class="li"> That data is stored in <strong>fixed-size units</strong>, called <strong>sectors</strong>, which the system can access in any order.</div>
+</li>
+</ul>
+
+<p>
+
+Even though the ramdisk could be more flexible, it conforms to the block device
+interface so that it can be used everywhere a physical block device can be used.
+The Linux block device interface also includes an <code>ioctl</code> function to perform
+special per-device operations. You will use the <code>ioctl</code> interface to
+implement the locking features of your block device.
+</p>
+
+</div>
+
+<h4><a name="reading-and-writing" id="reading-and-writing">Reading and writing</a></h4>
+<div class="level4">
+
+<p>
+
+We suggest you first implement read and write support in your block device.
+This is the <code>osprd_process_request</code> function. When you're done, you'll be
+able to read and write data from each ramdisk by reading and writing the
+<code>/dev/osprdX</code> files! To make this easier, we've provided a program called
+<code>osprdaccess</code> that can read or write the block device.
+</p>
+
+<p>
+To write data into the block device, use a command like
+</p>
+<pre class="code">  echo DataForRamDisk | ./osprdaccess -w</pre>
+
+<p>
+The <code>osprdaccess -w</code> command reads data from standard input and writes it to
+the ramdisk.  It writes to <code>/dev/osprda</code> by default, but you can also supply
+a ramdisk name:
+</p>
+<pre class="code">  echo DataForRamDisk | ./osprdaccess -w /dev/osprdb</pre>
+
+<p>
+You can also write the contents of a file into the ramdisk.
+</p>
+<pre class="code">  ./osprdaccess -w &lt; whatever.txt</pre>
+
+<p>
+You can limit the amount of data written; this writes at most 128 bytes:
+</p>
+<pre class="code">  ./osprdaccess -w 128 &lt; whatever.txt</pre>
+
+<p>
+And you can write starting at an offset into the file.  This writes the third sector (bytes 1024-1535).
+</p>
+<pre class="code">  ./osprdaccess -o 1024 -w 512 &lt; whatever.txt</pre>
+
+<p>
+
+The <code>./osprdaccess -r</code> command reads data from the ramdisk and writes it to
+standard output.  It takes very similar arguments.  For instance, this command
+reads bytes 12-15 of <code>/dev/osprdc</code> and prints them to standard output.
+</p>
+<pre class="code">  ./osprdaccess -o 12 -r 4 /dev/osprdc</pre>
+
+<p>
+
+Here are some more examples.
+
+</p>
+<pre class="code"> % ./osprdaccess -r 512 | hexdump -C
+ 00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+ *
+ 00000200
+ % ./osprdaccess -w 512 &lt; osprd.c
+ % ./osprdaccess -r 512 | hexdump -C
+ .......
+ 00000000  23 69 6e 63 6c 75 64 65  20 3c 6c 69 6e 75 78 2f  |#include &lt;linux/|
+ 00000010  76 65 72 73 69 6f 6e 2e  68 3e 0a 23 69 6e 63 6c  |version.h&gt;.#incl|
+ .......</pre>
+
+</div>
+
+<h4><a name="locking" id="locking">Locking</a></h4>
+<div class="level4">
+
+<p>
+
+Next, you will implement support for locking. A write lock guarantees exclusive access to the ramdisk -- 
+no other readers or writers have access to the ramdisk. We've designed 
+the interface as follows.  Assume that process P has a file descriptor <code>fd</code> that points to a ramdisk.
+
+</p>
+<ul>
+<li class="level1"><div class="li"> <code>ioctl(fd, OSPRDIOCACQUIRE);</code></div>
+<ul>
+<li class="level2"><div class="li"> This system call acquires a lock on the ramdisk file.  If <code>fd</code> was opened for reading (<code>O_RDONLY</code>), then the system call requests a read lock.  If <code>fd</code> was opened for writing (<code>O_WRONLY</code> or <code>O_RDWR</code>), then the system call requests a write lock.</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <code>ioctl(fd, OSPRDIOCRELEASE);</code></div>
+<ul>
+<li class="level2"><div class="li"> This system call releases any lock on the ramdisk file.</div>
+</li>
+<li class="level2"><div class="li"> In addition, closing <code>fd</code> will release any lock on the ramdisk file.</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <code>ioctl(fd, OSPRDIOCTRYACQUIRE);</code></div>
+<ul>
+<li class="level2"><div class="li"> This system call <em>attempts</em> to acquire a lock on the ramdisk file.  This is just like OSPRDIOCACQUIRE, except that the acquire operation would block.  <code>OSPRDIOCTRYACQUIRE</code> never blocks; it returns the <code>EBUSY</code> error instead.</div>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+
+The interface works as follows.
+
+</p>
+<ul>
+<li class="level1"><div class="li"> A request for a read lock on a ramdisk file will block until no other files on that ramdisk have a write lock.</div>
+</li>
+<li class="level1"><div class="li"> A request for a write lock on a ramdisk file will block until no other files on that ramdisk have a read <strong>or</strong> write lock.</div>
+</li>
+</ul>
+<ul>
+<li class="level1"><div class="li"> Lock requests are served in the 
+order in which they are received.  Thus, for example, if P1 requests the
+ write lock, and then P2 requests the read lock for the same ramdisk, 
+then P1's request is served first and P2's request will be blocked until
+ P1 has released the write lock.</div>
+</li>
+</ul>
+
+<p>
+
+To implement these semantics, you will need to maintain a wait queue per
+ ramdisk, so that processes that are blocked can be placed on the wait 
+queue.  You also keep track of how many files are open for a given 
+ramdisk for reading and for writing.
+</p>
+
+<p>
+The <code>osprdaccess</code> program's <code>-l</code> option will open the ramdisk and then request a lock before performing the read or write. The <code>-l</code> flag optionally takes a parameter that indicates a delay to wait after opening and before locking the disk.  The <code>-d</code>
+ option allows you to specify a delay to wait after opening (and 
+possibly locking) the disk, but before performing the read or write and 
+closing the disk.  The <code>-L</code> option is like <code>-l</code>, but uses TRYACQUIRE instead of ACQUIRE.  You can use these functions to test the locking feature.
+
+</p>
+<pre class="code">    # First, zero out the ramdisk.  We do this after each set of commands.
+ % ./osprdaccess -w -z</pre>
+<pre class="code">    # This command writes "foo\n" into the first four bytes of the ramdisk,
+    # as we can see when we read those bytes back out.
+ % echo foo | ./osprdaccess -w
+ % ./osprdaccess -r 4
+ foo</pre>
+<pre class="code">    # This command has the same effect, but the "-d 5" option tells the first
+    # osprdaccess to wait 5 seconds after opening the ramdisk, but before
+    # writing.
+ % echo foo | ./osprdaccess -w -d 5
+ [[WAITS 5 SECONDS]]
+ % ./osprdaccess -r 4
+ foo</pre>
+<pre class="code">    # Now let's play with some locks!  Run the first osprdaccess
+    # in the background, then try to run the second.  The second should wait
+    # for the first to complete.  It is easiest to get this to work if you "tee up"
+    # both commands in adjacent terminals, then press return on the two
+    # terminals in the correct order.  Or you can make the delay bigger so you
+    # have time to type (or paste) the second command.
+ % echo foo | ./osprdaccess -w -l -d 5 &amp;
+ [1]
+ % ./osprdaccess -r 4 -l
+ [[WAITS 5 SECONDS]]
+ foo</pre>
+<pre class="code">    # If we don't use locking, the read and write proceed in parallel.
+ % ./osprdaccess -w -z
+ % echo foo | ./osprdaccess -w -d 5 &amp;
+ % ./osprdaccess -r 4
+ [[returns four 0 characters right away]]</pre>
+<pre class="code">    # Note that two locking reads can proceed in parallel.
+ % echo foo | ./osprdaccess -w
+ % ./osprdaccess -r 4 -l -d 5 &amp;
+ [1]
+ % ./osprdaccess -r 4 -l
+ foo      [[returns right away, then after 5 seconds:]]
+ foo</pre>
+<pre class="code">    # But a locking read will not allow a locking write.
+ % ./osprdaccess -r 4 -l -d 5 &amp;
+ [1]
+ % echo bar | ./osprdaccess -w -l
+ [[WAITS 5 SECONDS]]</pre>
+<pre class="code">   # As we can see when we use TRYACQUIRE.
+ % ./osprdaccess -r 4 -l -d 5 &amp;
+ [1]
+ % echo bar | ./osprdaccess -w -L
+ ioctl OSPRDIOCTRYACQUIRE: Device or resource busy
+ 
+   # Locking the same ramdisk twice would cause deadlock!
+ % echo foo | ./osprdaccess -w -l /dev/osprda /dev/osprda
+ ioctl OSPRDIOCACQUIRE: Resource deadlock avoided</pre>
+
+<p>
+
+The examples above are not exhaustive.  Make sure to come up with your 
+own examples to thoroughly test your locking implementation.
+</p>
+
+<p>
+Make sure you protect modifications to shared state with the <code>osprd_info_t</code>'s <code>mutex</code> member.  This is a <em>spin lock</em>,
+ or polling mutex.  Remember that it is illegal in Linux for a process 
+to block while holding a spin lock!  (This is because another thread 
+could then attempt to lock the spin lock, and spin forever.)  You will 
+have to arrange your code in later steps so that you always release the 
+spin lock before blocking and re-acquire it afterwards.
+</p>
+
+<p>
+You can either implement locking support all at once, or you can go more
+ gradually. To go gradually, first change osprd_ioctl to implement 
+mutual exclusion: make sure that lock requests don't complete until the 
+conditions described in the locking rules are met.  You can do this 
+without blocking. Instead, call schedule() if a lock request cannot 
+currently complete and then re-check the condition when you wake up 
+(when schedule returns).  Use the <code>ticket</code> members of <code>osprd_info_t</code> to serve lock requests in FIFO order.  (<code>schedule</code> and other important kernel functions are defined <a href="http://www.read.cs.ucla.edu/111/lab2functions" class="wikilink1" title="lab2functions">here</a>.  <strong>MAKE SURE YOU READ THAT PAGE!</strong>  The <code>ticket_head</code> and <code>ticket_tail</code> members are effectively an eventcount and a sequencer.)
+</p>
+
+<p>
+Second, support <em>blocking</em>, using the <code>wait_queue</code> 
+functions.  To implement blocking, you need code to begin blocking in 
+the OSPRDIOCACQUIRE case of osprd_ioctl (this is a trivial change if you
+ use <code>wait_event_interruptible</code>), and you need code to wake up blocking processes in osprd_release and in the OSPRDIOCRELEASE case of osprd_ioctl.
+</p>
+
+<p>
+Signals are a tricky aspect of this interface. Remember that signals
+are a way to send a running process asynchronous events, or to kill a running
+process. If the process is
+blocked in the kernel -- for instance, if it is blocked in
+<code>osprd_ioctl</code> -- then the kernel must wake up so the process can process the
+signal. Since we want to kill blocked processes, they had better be able
+to handle signals. This means:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> When blocked, processes should use an <em>interruptible wait</em>.
+ This means that signal delivery takes place as usual.  (In an 
+uninterruptable wait, you would not be able to kill a waiting processes 
+except by causing the event it was waiting for -- and this would, in 
+turn, prevent your module from being unloaded because it is currently 
+blocked by code in your module. You'd have to reboot a lot!)</div>
+</li>
+<li class="level1"><div class="li"> When your process receives a signal, it will wake up.  If a signal was received (see the <code>signal_pending</code> function, or <code>-ERESTARTSYS</code> return value), <code>osprd_ioctl</code> should <strong>immediately return</strong> to its caller.</div>
+</li>
+</ul>
+
+<p>
+
+Test your code using test cases like those above (<strong>AND OTHERS you come up with yourself</strong>).
+</p>
+
+</div>
+
+<h4><a name="deadlock" id="deadlock">Deadlock</a></h4>
+<div class="level4">
+
+<p>
+
+So far, so good!  But there's a problem: An ACQUIRE operation might 
+cause a deadlock.  (Note that TRYACQUIRE could never cause deadlock -- 
+why not?)  Your job is to detect these deadlocks.  Instead of blocking 
+forever (or until a signal), your code should return <code>-EDEADLK</code>, a special error code that indicates a deadlock was avoided.
+</p>
+
+<p>
+One easy case of deadlock is indicated above.  For full credit, you should detect <strong>any</strong>
+ possible deadlock condition, but we will put most grading weight on 
+simple deadlock cases where a process is waiting directly for itself.
+</p>
+
+<p>
+The <code>lab2-tester.pl</code> <strong>DOES NOT TEST DEADLOCK AVOIDANCE</strong>.  Come up with your own test cases.
+</p>
+
+</div>
+
+
+<h2><a name="getting-debugging-output" id="getting-debugging-output">Getting debugging output</a></h2>
+<div class="level2">
+
+<p>
+
+Messages you print with <code>printk</code> or <code>eprintk</code> from your module may not be
+shown on the screen by default, which can make debugging a little difficult. If
+you find that this is the case, you can get a list of the messages by running
+the <code>dmesg</code> program. On the lab machines, you may need to run it via
+<code>sudo</code> as described above for <code>insmod</code> and <code>rmmod</code>; if so,
+you may also need to specify its full path: <code>/bin/dmesg</code>. We found that
+<code>eprintk</code> messages were actually sent to all open terminals on the lab
+machines, so you may want to use <code>printk</code> and <code>dmesg</code> instead.
+</p>
+
+</div>
+
+<h2><a name="using-your-module" id="using-your-module">Using your module</a></h2>
+<div class="level2">
+
+<p>
+
+After loading your module, you'll probably want to try using it. To do this, you
+will have to access the <em>block special files</em> in <code>/dev</code> which
+represent the devices it controls. If you are using your own machine, these
+files may not exist yet (depending on a variety of things). Look in
+<code>/dev</code> to see if you have files named <code>osprda</code>, <code>osprdb</code>,
+<code>osprdc</code>, and <code>osprdd</code>. If so, you're all set. If not, run the
+<code>create-devs</code> script as <code>root</code> to create them.
+</p>
+
+<p>
+These files are not like other files in your filesystem. They do not actually
+contain any data; they just "represent" the devices your driver controls. The
+only reason they are there is so programs can call <code>open</code> on them to get file
+descriptors which the kernel knows are connected to particular devices. However,
+this property means that many programs can use them just as if they were normal
+files. This is part of the UNIX design philosophy that "everything is a
+file."
+</p>
+
+<p>
+So, to use your devices and thus your module, you just need a program which
+will open the block special files and read from or write to them. We have
+included the <code>osprdaccess.c</code> code for this purpose, but you can also
+write your own program to do it. If you write your own program, you may want to
+look into the <code>read</code> (<code>man 2 read</code>) and <code>write</code> (<code>man 2
+write</code>) system calls.
+</p>
+
+</div>
+
+
+<h2><a name="hand-in" id="hand-in">Hand-in</a></h2>
+<div class="level2">
+
+<p>
+
+When you are finished, edit the file named <code>answers.txt</code> and follow the
+instructions at the top of the file to fill in your name(s), student ID(s),
+email address(es), short descriptions of any extra credit or challenge problems
+you did, any known limitations of your code (including known bugs), and any
+other information you'd like us to have.
+</p>
+
+<p>
+Then run "<code>make tarball</code>" which will generate a file
+<code>lab2-<em>yourusername</em>.tar.gz</code> inside the lab2 directory.
+Upload this file to CourseWeb using a web browser to turn in the project.
+Remember to upload it only once if you are working in a team - the <code>answers.txt</code>
+file will allow us to give both team members credit.
+</p>
+
+<p>
+<strong>Good luck!</strong>
+</p>
+
+</div>
+
+    <!-- wikipage stop -->
+  </div>
+
+  <div class="clearer">&nbsp;</div>
+
+  
+  <div class="stylefoot">
+
+ 
+  </div>
+
+</div>
+
+<hr>
+<p><br>
+Copyright Eddie Kohler <a href="http://www.read.cs.ucla.edu/111/">CS111 Winter 2011</a>
+</p><p><br>
+
+
+</p></body></html>

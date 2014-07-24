@@ -1,0 +1,829 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!-- saved from url=(0059)http://www.lasr.cs.ucla.edu/vahab/cs111/labs/lab3/lab3.html -->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" dir="ltr" lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <title>
+    CS111 Lab3
+  </title>
+
+
+  <style type="text/css"></style></head>
+
+<body>
+
+
+<div class="dokuwiki">
+  
+  <div class="stylehead">
+
+    <div class="header">
+
+
+    </div>
+
+
+    
+
+    
+    
+    <div class="clearer"></div>
+  </div>
+  
+  
+  <div class="page">
+
+
+<h1><a name="lab-3" id="lab-3">Lab 3</a></h1>
+<div class="level1">
+
+<p>
+
+
+
+<strong>Quick link:</strong> <a href="http://www.read.cs.ucla.edu/111/lab2functions" class="wikilink1" title="lab2functions">Useful kernel functions</a>
+</p>
+
+</div>
+
+<h2><a name="overview" id="overview">Overview</a></h2>
+<div class="level2">
+
+<p>
+
+In Lab 2, we used a RAM disk block device to teach you about the Linux kernel
+setting and about synchronization. In Lab 3, you'll learn about file systems by
+writing your own file system driver for Linux.
+</p>
+
+<p>
+Operating systems generally support many different file systems, from
+old-school FAT (common in DOS machines) to new formats such as Linux's ext3.
+Each file system type is written to fit a common interface, called the <em>VFS
+layer</em>. (File systems are often implemented using object oriented techniques.)
+You will see how a real VFS layer works by filling out a
+simple file system implementation. You will load that file system module into
+the kernel and <em>mount</em> the file system, allowing you to access your file
+system with usual Unix commands like <code>cat</code>, <code>dd</code>, <code>emacs</code>, and even
+<code>firefox</code>. The file system driver stores its data in a built-in RAM disk,
+kind of like your RAM disk from Lab 2.
+</p>
+
+<p>
+Like Lab 2, we expect you'll do this lab on <a href="http://www.read.cs.ucla.edu/111/qemu" class="wikilink1" title="qemu">Qemu</a> using the <code>./run-qemu</code> script on your machine, or in the Linux lab.
+Alternatively, you can also use a Linux machine, such as the Linux lab machines.
+</p>
+
+</div>
+
+<h2><a name="lab-materials" id="lab-materials">Lab materials</a></h2>
+<div class="level2">
+
+<p>
+
+The skeleton code you will get for this lab consists of the following files:
+
+</p>
+<div class="table sectionedit1"><table class="inline">
+	<tbody><tr class="row0">
+		<td class="col0 leftalign"> <strong><code>ospfs.h</code></strong>       </td><td class="col1"> Commented header file defining file system structures and constants. </td>
+	</tr>
+	<tr class="row1">
+		<td class="col0 leftalign"> <strong><code>ospfsmod.c</code></strong>    </td><td class="col1"> The file system module's source code. <strong>All exercises in the lab involve changing this code.</strong> </td>
+	</tr>
+	<tr class="row2">
+		<td class="col0 leftalign"> <strong><code>answers.txt</code></strong>   </td><td class="col1"> Fill this out before submitting. </td>
+	</tr>
+	<tr class="row3">
+		<td class="col0 leftalign"> <strong><code>base/</code></strong>         </td><td class="col1"> The contents of this directory are copied into your file system's initial RAM disk. You can change the contents of <code>base/</code>, then type <code>make clean; make</code>, to add files to or remove files from your RAM disk. </td>
+	</tr>
+	<tr class="row4">
+		<td class="col0 leftalign"> <strong><code>./run-qemu</code></strong>    </td><td class="col1"> This script starts up Qemu to run Lab 3. </td>
+	</tr>
+	<tr class="row5">
+		<td class="col0 leftalign"> <strong><code>./run-direct</code></strong>  </td><td class="col1"> This script runs Lab 3, and is intended for use on a Linux machine. </td>
+	</tr>
+	<tr class="row6">
+		<td class="col0 leftalign"> <strong><code>test/</code></strong>         </td><td class="col1 leftalign"> The <code>./run-qemu</code> script changes <code>test/</code> into a view of your <code>ospfs</code> file system.  </td>
+	</tr>
+	<tr class="row7">
+		<td class="col0 leftalign"> <strong><code>Makefile</code></strong>      </td><td class="col1"> </td>
+	</tr>
+	<tr class="row8">
+		<td class="col0"> <strong><code>ospfsformat.c</code></strong> </td><td class="col1"> Utility: Creates a RAM disk image from the <code>base/</code> directory. </td>
+	</tr>
+	<tr class="row9">
+		<td class="col0"> <strong><code>md5.c</code>, <code>md5.h</code></strong> </td><td class="col1"> Utility for <code>ospfsformat</code>. </td>
+	</tr>
+	<tr class="row10">
+		<td class="col0 leftalign"> <strong><code>fsimgtoc.c</code></strong>    </td><td class="col1"> Utility: Links the disk image into your module. </td>
+	</tr>
+	<tr class="row11">
+		<td class="col0 leftalign"> <strong><code>truncate.c</code></strong>    </td><td class="col1"> Utility: Truncates a file to a specified length. </td>
+	</tr>
+</tbody></table></div>
+
+<p>
+
+When you unpack <code>lab3.tar.gz</code> (with the command <code>tar xvzf
+lab3.tar.gz</code>) you will get a directory <code>lab3</code> which contains
+these files. Do your work in this directory.
+</p>
+
+</div>
+
+<h2><a name="handin-procedure" id="handin-procedure">Handin procedure</a></h2>
+<div class="level2">
+
+<p>
+
+When you are finished, edit the <code>answers.txt</code> file and follow the instructions to
+fill in your name(s), student ID(s), email address(es), short descriptions of
+any challenge problems you did, and any other information you'd like us to
+have. Then run "<code>make tarball</code>" which will generate a file
+<code>lab3-</code><em>yourusername</em><code>.tar.gz</code> inside the lab3 directory. Upload
+this file to CourseWeb using a web browser to turn in the project. (Please do
+not upload <code>.zip</code> files!)
+</p>
+
+</div>
+
+<h2><a name="background-information" id="background-information">Background information</a></h2>
+<div class="level2">
+
+</div>
+
+<h4><a name="file-system-preliminaries" id="file-system-preliminaries">File system preliminaries</a></h4>
+<div class="level4">
+
+<p>
+
+The file system you will work with, OSPFS, is simpler than most
+"real" file systems, but it is powerful enough to read and write files
+organized in a hierarchical directory structure. OSPFS currently does not
+support timestamps, permissions, or special device files
+like most UNIX file systems do. Additionally, your module is only capable
+of using an in-memory file system, meaning that the data "on disk" is
+actually stored entirely in main memory. This means that changes made to
+the file system are not saved across reboots (or across module loads and
+unloads).
+</p>
+
+</div>
+
+<h4><a name="file-system-structure" id="file-system-structure">File system structure</a></h4>
+<div class="level4">
+
+<p>
+
+Most UNIX file systems divide available disk space into two main types
+of regions: inode regions and data regions. UNIX file systems assign one
+inode to each file in the file system; a file's inode holds critical
+metadata about the file such as its attributes and pointers to its data
+blocks. The data regions are divided into large data blocks (typically 4KB
+or more), within which the file system stores file data and directory
+metadata. Directory entries contain file names and pointers to inodes; a
+file is said to be <em>hard-linked</em> if multiple directory entries in the
+file system refer to that file's inode. OSPFS is designed in much the same
+way.
+</p>
+
+<p>
+Both files and directories logically consist of a series of data blocks,
+which may be scattered throughout the disk much like the pages of a
+process's virtual address space can be scattered throughout physical
+memory.
+</p>
+
+</div>
+
+<h4><a name="sectors-and-blocks" id="sectors-and-blocks">Sectors and blocks</a></h4>
+<div class="level4">
+
+<p>
+
+Modern disks perform reads and writes in units of sectors, which today
+are almost universally 512 bytes each. File systems actually allocate and
+use disk storage in units of blocks. Be wary of the distinction between the
+two terms: sector size is a property of the disk hardware, whereas block
+size is an aspect of the operating system using the disk. A file system's
+block size must be at least the sector size of the underlying disk, but
+could be greater (often it is a power of two multiple of the sector
+size).
+</p>
+
+<p>
+The original UNIX file system used a block size of 512 bytes, the same
+as the sector size of the underlying disk. Most modern file systems use a
+larger block size, however, because storage space has gotten much cheaper
+and it is more efficient to manage storage at larger granularities. Our
+file system will use a block size of 1024 bytes.
+</p>
+
+<p>
+<a href="http://www.read.cs.ucla.edu/111/_detail/ospfssample3.gif?id=lab3" class="media" title="ospfssample3.gif"><img src="./CS111 Lab3_files/ospfssample3.gif" class="mediaright" title=" An OSPFS file system with N blocks and M inodes. " alt=" An OSPFS file system with N blocks and M inodes. " align="right"></a>
+</p>
+
+</div>
+
+<h4><a name="superblocks" id="superblocks">Superblocks</a></h4>
+<div class="level4">
+
+<p>
+
+File systems typically reserve certain disk blocks, at "easy-to-find"
+locations on the disk (such as the very start or the very end), to hold
+meta-data describing properties of the file system as a whole: the block size,
+disk size, any meta-data required to find the root directory, the time the file
+system was last mounted, the time the file system was last checked for errors,
+and so on. These special blocks are called superblocks.
+</p>
+
+<p>
+Our file system will have exactly one superblock, which will always be
+at block 1 on the disk. Its layout is defined by <code>struct ospfs_super</code>
+in <code>ospfs.h</code>. Block 0 is typically reserved to hold boot loaders and
+partition tables, so file systems generally never use the very first disk
+block. Most "real" file systems maintain multiple superblocks, replicated
+throughout several widely-spaced regions of the disk, so that if one of
+them is corrupted or the disk develops a media error in that region, the
+other superblocks can still be found and used to access the file system.
+OSPFS omits this feature for simplicity.
+</p>
+
+</div>
+
+<h4><a name="the-block-bitmapmanaging-free-disk-blocks" id="the-block-bitmapmanaging-free-disk-blocks">The block bitmap: managing free disk blocks</a></h4>
+<div class="level4">
+
+<p>
+
+Just as a kernel must manage the system's physical memory to ensure that
+each physical page is used for only one purpose at a time, a file system
+must manage the blocks of storage on a disk to ensure that each block is
+used for only one purpose at a time. In file systems it is common to keep
+track of free disk blocks using a bitmap rather than a linked list, because
+a bitmap is more storage-efficient than a linked list and easier to keep
+consistent on the disk. ("FAT" file systems use a linked list.) Searching
+for a free block in a bitmap can take more CPU time than simply removing
+the first element of a linked list, but for file systems this isn't a
+problem because the I/O cost of actually accessing the free block after we
+find it dominates performance.
+</p>
+
+<p>
+To set up a free block bitmap, we reserve a contiguous region of space
+on the disk large enough to hold one bit for each disk block. For example,
+since our file system uses 1024-byte blocks, each bitmap block contains
+1024*8 = 8192 bits, or enough bits to describe 8192 disk blocks. In other
+words, for every 8192 disk blocks the file system uses, we must reserve
+one disk block for the block bitmap. A given bit in the bitmap is set
+(value 1) if the corresponding block is free, and clear (value 0) if the
+corresponding block is in use. The block bitmap in our file system always
+starts at disk block 2, immediately after the superblock. We'll reserve
+enough bitmap blocks to hold one bit for each block in the entire disk,
+including the blocks containing the boot sector, the superblock, and the
+bitmap itself. We will simply make sure that the bitmap bits corresponding
+to these special, "reserved" areas of the disk are always clear (marked
+in-use).
+</p>
+
+<p>
+<a href="http://www.read.cs.ucla.edu/111/_detail/ospfssample2b.gif?id=lab3" class="media" title="ospfssample2b.gif"><img src="./CS111 Lab3_files/ospfssample2b.gif" class="mediaright" title=" An OSPFS inode with associated directory entry and data blocks, including indirect blocks. " alt=" An OSPFS inode with associated directory entry and data blocks, including indirect blocks. " align="right"></a>
+</p>
+
+</div>
+
+<h4><a name="inodes" id="inodes">Inodes</a></h4>
+<div class="level4">
+
+<p>
+
+Each file and directory on the system corresponds to exactly one
+<em>inode</em>. The inode stores metadata information about the file, such
+as its size, its type (file or directory), and the locations of its data
+blocks. Directory information, such as the file's name and directory
+location, is <em>not</em> stored in the inode; instead, directory entries
+refer to inodes by number. This allows the file system to safely move
+files from one directory to another, and also allows for "hard links". Not
+all file systems have inodes, but OSPFS does.
+</p>
+
+<p>
+The layout of OSPFS's inodes is described by <code>struct ospfs_inode</code> in
+<code>ospfs.h</code>. The <code>oi_direct</code> array in <code>struct ospfs_inode</code> contains
+space to store the block numbers of the first 10 (<code>OSPFS_NDIRECT</code>)
+blocks of the file, which we call the file's direct blocks. For small
+files up to 10*1024 = 10KB in size, this means that the block numbers of
+all of the file's blocks will fit directly within the <code>ospfs_inode</code>
+structure itself. For larger files, however, we need a place to hold the
+rest of the file's block numbers. For any file greater than 10KB in size,
+therefore, we allocate an additional disk block, called the file's
+indirect block, to hold up to 1024/4 = 256 additional block numbers. 
+The 10th block number is the 0th slot in the
+indirect block. This allows files to be up to
+266 blocks, or a bit more than 256KB, in size. 
+For files larger than this, the OSPFS file system supports doubly-indirect blocks as well.
+A doubly-indirect block points to indirect blocks, each of which points to 256 direct blocks.
+This allows files to be up to 10+256+256*256 = 65802 blocks.
+To support larger files, "real"
+file systems may support triply-indirect blocks as well.
+See the picture at right.
+</p>
+
+<p>
+Inodes are relatively small structures; OSPFS's take up 64 bytes each.
+They are generally stored in a contiguous table on disk. The size of this
+table is specified when the file system is created, and in most file
+systems it cannot later be changed. Just like blocks, an inode can be
+either in use or free, and just like blocks, a file system can run out of
+inodes. It is actually possible to run out of inodes before running out of
+blocks, and in this case no more files can be created even though there is
+space available to store them. For this reason, and because inodes
+themselves do not take up much space, the inode table is often created with
+far more available inodes than the file system is expected to
+need. (Remember, each file uses an inode, so the maximum number of files
+and directories the file system can store at once equals the number of
+inodes.)
+</p>
+
+<p>
+In OSPFS, the inode table is allocated immediately after the free block
+bitmap, and its blocks are also marked as in use in the free block
+bitmap. The number of inodes is stored in the superblock, and for
+convenience the block number of the first block of the inode table is also
+stored in the superblock. (Why is this only for convenience? How could we
+determine this value based only on the size of the disk?)
+</p>
+
+<p>
+Even though your kernel module will not support creating new hard links
+(unless you do that challenge problem), each inode in OSPFS has a "link
+count", which is a number indicating how many directory entries refer to
+it.  (The <code>ospfsformat</code> utility knows how to create hard links when
+it creates the initial OSPFS file system for your module to use.)  If there
+is only one hard link to a file, then the link count will be 1: only
+one directory entry refers to the inode (the normal case). For each extra link created in
+a "real" UNIX file system, the link count increases by 1, and for each
+hard link removed, the link count decreases by 1. Technically speaking,
+even the file's original name is a hard link -- it is no
+different than later directory entries created for the inode except that it
+was created first. If the link count reaches 0, it means that the inode no
+longer has any hard links, and its storage space (both the blocks that make
+up the file and the inode itself) can be marked as free and reused. You
+will need to support this behavior when you delete files from OSPFS.
+</p>
+
+<p>
+You may find the <code>-i</code> and <code>-l</code> options to the <code>ls</code> program useful.
+The <code>-i</code> option causes <code>ls</code> to display the inode number of each file.
+The <code>-l</code> option causes <code>ls</code> to display a "long listing" which includes,
+among other information, the link count and size of each file. These
+options can also be combined.
+</p>
+
+<p>
+Here's a sample OSPFS file system.  It <strong>sort of</strong> corresponds to the <code>base/</code> directory we handed out.  (Note that the <code>hello.txt</code> data block is also linked to <code>world.txt</code>
+ -- there is a file with two hard links!)  The actual file system you 
+observe will be different; your first free block will be around block 
+#106.
+</p>
+
+<p>
+<a href="http://www.read.cs.ucla.edu/111/_detail/ospfssample.gif?id=lab3" class="media" title="ospfssample.gif"><img src="./CS111 Lab3_files/ospfssample.gif" class="mediacenter" title=" An OSPFS file system corresponding to the base/ directory we handed out. " alt=" An OSPFS file system corresponding to the base/ directory we handed out. "></a>
+</p>
+
+</div>
+
+<h4><a name="directories-versus-regular-files" id="directories-versus-regular-files">Directories versus regular files</a></h4>
+<div class="level4">
+
+<p>
+
+An <code>ospfs_inode</code> structure in our file system can represent either a
+regular file or a directory; these two types of "files" are distinguished
+by the type field in the <code>ospfs_inode</code> structure. The file system
+manages regular files and directory-files in exactly the same way, except
+that it does not interpret the contents of the data blocks associated
+with regular files at all, whereas the file system interprets the
+contents of a directory-file as a series of <code>ospfs_direntry</code> structures
+describing the files and subdirectories within the directory. Each
+<code>ospfs_direntry</code> structure just contains a filename and an inode number.
+All other information about the file -- including size, type, and pointers
+to data blocks -- is stored in the inode.
+</p>
+
+<p>
+OSPFS directory entry structures are <em>fixed length</em>.  Every directory entry
+takes up exactly 128 bytes.  The directory entry
+design is explained in more detail in <code>ospfs.h</code>.
+</p>
+
+<p>
+Inode number 1 in our file system is special: it is the inode for the
+<em>root directory</em> of the file system.  Inode number 0 is reserved and
+must never be used.
+</p>
+
+</div>
+
+<h4><a name="hard-links" id="hard-links">Hard Links</a></h4>
+<div class="level4">
+
+<p>
+
+Files can take up a lot of space, and you may want the same exact set of
+ data to be stored in multiple directories.  Hard links are a simple 
+mechanism that lets you have multiple <code>"files"</code> link to the same <code>inode</code> structure.  Suppose the user runs the following commands:
+
+</p>
+<pre class="code">% echo foo &gt;&gt; foo.txt
+% ln foo.txt gah.txt
+% cat gah.txt
+foo
+% echo blurb &gt;&gt; gah.txt
+% cat foo.txt
+foo
+blurb</pre>
+
+<p>
+
+In this code, the user is hard linking <code>gah.txt</code> to the same data that represents <code>foo.txt</code>.  So whenever either <code>gah.txt</code> or <code>foo.txt</code>
+ is changed, both files see those changes, automatically.  This may 
+sound challenging, but it's actually really simple.  The directory 
+entries for <code>gah.txt</code> and <code>foo.txt</code> map to the same inode number.  For this, you'll have to just fill out <code>osprd_link</code>,
+ which gets called whenever the user tries to create a hard link in a 
+directory.  For simplicity, you do not need worry about or test hard 
+links to symlinks. Only worry about hard links to regular files.
+</p>
+
+</div>
+
+<h4><a name="symbolic-links" id="symbolic-links">Symbolic links</a></h4>
+<div class="level4">
+
+<p>
+
+OSPFS also supports <em>symbolic links</em>.  This type of file adds a layer of indirection to the file system:
+A symbolic link file essentially points at another file.  The command "<code>ln -s src.txt dst.txt</code>", will create a symbolic link
+file <code>dst.txt</code> that points to file <code>src.txt</code>.  If an application asks to open <code>dst.txt</code>,
+the kernel will examine the symbolic link, <em>follow</em> the symbolic link, and return a file descriptor open to <code>src.txt</code>.
+For example, any changes to <code>src.txt</code> will show up immediately when a program examines <code>dst.txt</code>.
+In OSPFS, symbolic links' destination files are stored in their inodes themselves.  See <code>ospfs.h</code> for more detail.
+</p>
+
+<p>
+You are expected to add support for <em>symbolic link creation and deletion</em> to <code>ospfsmod.c</code>.  Test it using code like this:
+
+</p>
+<pre class="code">% ln -s hello.txt thelink
+% diff hello.txt thelink &amp;&amp; echo Same contents
+Same contents
+% echo "World" &gt;&gt; hello.txt
+% diff hello.txt thelink &amp;&amp; echo Same contents
+Same contents
+% rm thelink</pre>
+
+</div>
+
+<h4><a name="conditional-symlinks" id="conditional-symlinks">Conditional Symlinks</a></h4>
+<div class="level4">
+
+<p>
+
+One nice thing about symlinks is that the actual symlink file can 
+contain anything.  This allows the file system to interpret a symlink in
+ unique ways.  For instance, suppose you have a networked file system 
+(like the one on the Seasnet machines) that connects to multiple 
+different architectures.  In order to use different versions of a 
+binary, you currently need to set different values for the 'PATH' 
+environment variable.  It would be much nicer if the a symlink could 
+link to two different paths, and select the right one based on some 
+condition (in this case the cpu architecture).  Doing this all the way 
+is rather challenging, so we'll just start with a simple proof of 
+concept; our conditional symlinks will be based on whether or not the 
+current process is running as root.
+</p>
+
+<p>
+Here's how they will work:
+</p>
+<ul>
+<li class="level1"><div class="li"> The following command creates a conditional symlink: "<code>ln -s root?hello.txt:bye.txt test</code>".  There are four important parts of this conditional symlink.</div>
+<ul>
+<li class="level2"><div class="li"> The conditional statement.  For this
+ lab, it will always 'root?' which is true if the current process is 
+running as root and false in all other cases.</div>
+</li>
+<li class="level2"><div class="li"> The symlink for when the condition 
+is true.  In this case it is 'hello.txt'.  Whenever root accesses this 
+symlink, it should be redirected to 'hello.txt' automatically.</div>
+</li>
+<li class="level2"><div class="li"> The symlink for when the condition 
+is false.  In this case it is 'bye.txt'.  Whenever any non-root process 
+accesses this symlink, it should be automatically redirected to 
+'bye.txt'.</div>
+</li>
+<li class="level2"><div class="li"> The symlink's name.  In this case it is 'test'.</div>
+</li>
+</ul>
+</li>
+</ul>
+
+<p>
+
+Handling this properly will require several things: determining the user
+ id of the current running process, knowing when the running process is 
+root, knowing when a conditional symlink is being accessed, and how to 
+interpret a conditional symlink upon access.  Some functions useful for 
+this have been added to the <a href="http://www.read.cs.ucla.edu/111/lab2functions#lab-3-functions" class="wikilink1" title="lab2functions">Lab functions page</a>.
+</p>
+
+<p>
+Here's an example of how this should work:
+
+</p>
+<pre class="code"> # cd test
+ # echo "Not root" &gt; notroot
+ # echo "Root" &gt; root
+ # ln -s root?root:notroot amiroot
+ # cat amiroot
+ Root
+ # su user -c "cat amiroot"                        # run command as non-root user
+ Not root</pre>
+
+</div>
+
+<h2><a name="what-you-have-to-do" id="what-you-have-to-do">What you have to do</a></h2>
+<div class="level2">
+
+<p>
+
+Your assignment will be to implement the routines that handle free block
+management, changing file sizes, read/write to the file, reading a
+directory file, deleting symbolic links, creating files, and conditional symlinks.
+</p>
+
+<p>
+You will need to implement exercises in the following functions for this
+lab. One plausible order (with <strong>rough</strong> grade percentages) is this:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> Support for reading files: <code>ospfs_read</code> (15%)</div>
+</li>
+<li class="level1"><div class="li"> Support for reading directories: <code>ospfs_dir_readdir</code> (10%)</div>
+</li>
+<li class="level1"><div class="li"> Free block bitmap bookkeeping: <code>allocate_block</code>, <code>free_block</code> (15%)</div>
+</li>
+<li class="level1"><div class="li"> Support for changing file sizes: <code>change_size</code> (15%)</div>
+</li>
+<li class="level1"><div class="li"> Support for writing files: <code>ospfs_write</code> (15%)</div>
+</li>
+<li class="level1"><div class="li"> Support for creating files: <code>ospfs_create</code> (10%)</div>
+</li>
+<li class="level1"><div class="li"> Support for creating hard links: <code>ospfs_link</code> (5%)</div>
+</li>
+<li class="level1"><div class="li"> Support for creating and deleting symbolic links: <code>ospfs_symlink</code> and <code>ospfs_unlink</code> (10%)</div>
+</li>
+<li class="level1"><div class="li"> Support for conditional symlinks (5%).</div>
+</li>
+</ul>
+
+<p>
+
+All of these functions have comments explaining what you must
+do. Also read the comments in <code>ospfs.h</code> and towards the top of
+<code>ospfsmod.c</code> to get oriented.
+</p>
+
+</div>
+
+<h2><a name="building-the-lab" id="building-the-lab">Building the lab</a></h2>
+<div class="level2">
+
+<p>
+
+This lab is designed to run within the Qemu emulator, like Lab 2.  So just run <code>./run-qemu</code> and press Enter at the <code>. go</code> prompt.
+</p>
+
+<p>
+We have added new support for re-building your lab in the Qemu emulator 
+(so you don't have to reboot Qemu to fix compilation errors and such).  
+To reload your source, first type "<code>r</code>" in your shell window (where you ran <code>./run-qemu</code>), then type "<code>reload</code>" in the Qemu window.  Do note that this process <em>wipes</em> your <code>test</code> directory, replacing it with a fresh version.
+</p>
+
+<p>
+This builds an initial OSPFS image using the contents of the
+<code>base</code> directory. If you want to add files to your OSPFS image,
+simply add files and directories to <code>base</code>, then rerun Qemu.  If <code>make</code> reports an error that
+the resulting file system is too big, raise the number <code>512</code> in the
+Makefile to something larger.
+By default, the image created by <code>ospfsformat</code> contains two directory
+entries which refer to the same file (that is, they are hard links):
+<code>hello.txt</code> and <code>world.txt</code>. You can add more files like this by
+adding hard links to the <code>base</code> directory using the <code>ln</code> command.
+Read its manual page by typing <code>man ln</code> at a shell prompt. (Note: the
+link counts on directories are always larger than one. Why might this be?)
+The Makefile also creates a symbolic link from file <code>link</code> to <code>hello.txt</code>.
+</p>
+
+<p>
+The Qemu environment then <em>mounts</em> the file system on an existing
+directory, named <code>test</code>. This hides the directory's existing contents, turning the
+directory into a "gateway" into the new file system. When your file system is ready, <code>ls base</code> and <code>ls test</code>
+should return the same results (except for things like ownership,
+permissions, and inode numbers).
+</p>
+
+<p>
+It is worth discussing how the functionality of the script is
+implemented. The following list shows the commands used:
+
+</p>
+<ul>
+<li class="level1"><div class="li"> Installing a module in the kernel: <code>insmod ospfs.ko</code></div>
+</li>
+<li class="level1"><div class="li"> Checking to see if the module is installed: <code>cat /proc/modules</code> or <code>lsmod</code></div>
+</li>
+<li class="level1"><div class="li"> Mounting the filesystem onto the <code>test</code> directory: <code>/bin/mount -t ospfs none test</code></div>
+</li>
+<li class="level1"><div class="li"> Unmounting the filesystem from <code>test</code>: <code>umount test</code></div>
+</li>
+<li class="level1"><div class="li"> Removing a module from the kernel: <code>rmmod ospfs</code></div>
+</li>
+</ul>
+
+<p>
+
+</p>
+
+</div>
+
+<h2><a name="testing" id="testing">Testing</a></h2>
+<div class="level2">
+
+<p>
+
+After implementing these functions, you should be able to do the following in
+your filesystem: read and write to files, change the size of files, append to
+existing files, read the contents of directories, and create and remove files.
+</p>
+
+<p>
+Here are some hints for testing.
+
+</p>
+<ul>
+<li class="level1"><div class="li"> We provide a large GIF file to test your handling of large files (with indirect blocks), <code>pokercats.gif</code>.  To see whether your reading support works for large files, run <code>zgv test/pokercats.gif</code>
+ at the Qemu prompt.  You should see a picture.  (Press return to get 
+rid of the picture.)  To test writing support for large files, try 
+something like <code>cp test/pokercats.gif test/p.gif; zgv test/p.gif</code>.</div>
+</li>
+<li class="level1"><div class="li"> The <code>lab3-tester.pl</code> file, provided with the lab, works similarly to the testers from other labs.  <strong>You should as usual design some tests yourself.</strong></div>
+</li>
+</ul>
+
+<p>
+
+We have provided you with a minimal Lab 3 test script, <code>lab3-tester.pl</code>,
+to help you check a <em>few</em> of 
+the following test cases.  You are encouraged to add your own test cases 
+to it as you complete parts of your lab.  
+</p>
+
+<p>
+Here is a list of the test cases we will run on your code. Feel free to add these
+to the provided testing script so that it checks these things automatically for you! You will
+probably find the <code>dd</code> utility very useful to perform many of the tests. You
+can read its documentation (<code>man dd</code>) for details of how to use it: check out
+its <code>if=</code>, <code>of=</code>, <code>bs=</code>, <code>seek=</code>, <code>skip=</code>, and <code>conv=notrunc</code>
+options. Also the <code>truncate</code> utility we included with the skeleton code will
+help you test some of the cases. (Suggestion: compare the results of performing
+operations on your OSPFS file system to doing the same operations on the normal
+Linux file system.)
+
+</p>
+<ul>
+<li class="level1"><div class="li"> <strong>Directory reading tests:</strong> listing files in directories</div>
+<ul>
+<li class="level2"><div class="li"> ls of the root directory</div>
+</li>
+<li class="level2"><div class="li"> ls of the root directory including file types (ls -F)</div>
+</li>
+<li class="level2"><div class="li"> ls of subdirectory</div>
+</li>
+<li class="level2"><div class="li"> ls of subdirectory using more than one data block</div>
+</li>
+<li class="level2"><div class="li"> ls of subdirectory using indirect data blocks</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Reading tests:</strong> reading various parts of a file</div>
+<ul>
+<li class="level2"><div class="li"> read the first byte of a file</div>
+</li>
+<li class="level2"><div class="li"> read the first block of a file</div>
+</li>
+<li class="level2"><div class="li"> read half of the first block of a file</div>
+</li>
+<li class="level2"><div class="li"> read starting partway through the first block and into part of the next</div>
+</li>
+<li class="level2"><div class="li"> read more than one block</div>
+</li>
+<li class="level2"><div class="li"> try to read past the end of a file</div>
+</li>
+<li class="level2"><div class="li"> try to read into an invalid buffer pointer</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Overwrite tests:</strong> all these tests overwrite part of a file without changing the rest of the file</div>
+<ul>
+<li class="level2"><div class="li"> overwrite the first few bytes of a file</div>
+</li>
+<li class="level2"><div class="li"> overwrite the first two blocks of a file</div>
+</li>
+<li class="level2"><div class="li"> overwrite the second block of a file</div>
+</li>
+<li class="level2"><div class="li"> overwrite the middle part of the first block of a file</div>
+</li>
+<li class="level2"><div class="li"> overwrite the second half of the first block of a file</div>
+</li>
+<li class="level2"><div class="li"> overwrite the second half of the first block and the first half of the second block of a file</div>
+</li>
+<li class="level2"><div class="li"> try to write from an invalid buffer pointer</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Truncation tests:</strong> truncating files to various lengths</div>
+<ul>
+<li class="level2"><div class="li"> truncate a single data block file to 0 length</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with only direct data blocks to 0 length</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with indirect data blocks to 0 length</div>
+</li>
+<li class="level2"><div class="li"> truncate a single data block file to nonzero but smaller length</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with only direct data blocks to a smaller length that uses the same number of data blocks</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with only direct data blocks to a smaller length which uses fewer data blocks</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with indirect data blocks to a smaller length that still uses indirect data blocks</div>
+</li>
+<li class="level2"><div class="li"> truncate a file with indirect data blocks to a smaller length which only uses direct data blocks</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Appending tests:</strong> adding data to the end of a file (not necessarily using O_APPEND)</div>
+<ul>
+<li class="level2"><div class="li"> append data to a file with a single data block without requiring a new block to be allocated</div>
+</li>
+<li class="level2"><div class="li"> append more than one data block of data to a file</div>
+</li>
+<li class="level2"><div class="li"> append several data blocks to a file that already has indirect data blocks</div>
+</li>
+<li class="level2"><div class="li"> append data to a file with no indirect data blocks so that the appended data uses indirect data blocks</div>
+</li>
+<li class="level2"><div class="li"> try to append data to a file so that there would be more than the maximum allowed data blocks</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Block management tests:</strong> checking to make sure the block bitmap is managed correctly</div>
+<ul>
+<li class="level2"><div class="li"> try to allocate a block when there are no free blocks</div>
+</li>
+<li class="level2"><div class="li"> free a block and check that that block can be reallocated</div>
+</li>
+<li class="level2"><div class="li"> try to allocate 3 blocks when only 2 are free</div>
+</li>
+<li class="level2"><div class="li"> truncate a file so that it no longer has any indirect data blocks and ensure that the indirect pointer block is freed</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Deletion tests:</strong> checking that deleting files works correctly</div>
+<ul>
+<li class="level2"><div class="li"> delete a file from a directory</div>
+</li>
+<li class="level2"><div class="li"> delete a file with more than one hard link from a directory</div>
+</li>
+<li class="level2"><div class="li"> delete all hard links to an inode</div>
+</li>
+</ul>
+</li>
+<li class="level1"><div class="li"> <strong>Symbolic links:</strong> checking that symbolic links work correctly</div>
+<ul>
+<li class="level2"><div class="li"> create a symbolic link</div>
+</li>
+<li class="level2"><div class="li"> <strong>DELETE A SYMBOLIC LINK</strong> (you will need to check that this works!)</div>
+</li>
+</ul>
+</li>
+</ul>
+
+</div>
+
+
+
+
+
+</div></div></body></html>

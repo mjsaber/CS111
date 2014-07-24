@@ -1,0 +1,43 @@
+Jun Ma 704149452
+Excersice 1:
+Normaly yes. Since the return value(current pid) is saved in %eax once gets into kernal mode and each process runs seperately (have their own memory stack), so the change of schedule() doesn't affect the return value.
+But since the system doesn't provide memory isolation, that is, any process can get access to other processes' memory, so it may overwrite the original memory. In this case, the answer might be wrong.
+
+Excersice 2: Key point: use child->p_registers.reg_eax = 0 to return 0 for child process.
+
+Excersice 3: Add waited_pid array to process descriptor structure as wait queue to save which process is waited for this one.
+
+Excersice 4: Set zombie process to P_EMPTY.
+
+Excersice 7: (Test code in mops-app2.c is commented out) 
+#define INT_SYS_KILL 54 in mpos.h
+sys_kill(pid_t pid)
+{
+	int result;
+	asm volatile("int %1\n"
+		     : "=a" (result) //%eax
+		     : "i" (INT_SYS_KILL),
+		       "a" (pid)  //%eax
+		     : "cc", "memory");
+ 	return result;
+}
+case INT_SYS_KILL:
+	{
+		pid_t p = current->p_registers.reg_eax;
+		if (p <= 0 || p >= NPROCS || p == current->p_pid 
+		    || proc_array[p].p_state == P_EMPTY)
+		{
+			current->p_registers.reg_eax = -1; //invalid input pid, return -1
+		}
+		else if(proc_array[p].p_state != P_ZOMBIE)
+		{
+			proc_array[p].p_state = P_ZOMBIE; //set to be killed process to ZOMBIE
+			proc_array[p].p_exit_status = -1;
+			current->p_registers.reg_eax = 1;//return 1 for successfully kill
+
+		}
+		else
+			current->p_registers.reg_eax = 1;//for already been killed process
+        run(current);
+	}
+

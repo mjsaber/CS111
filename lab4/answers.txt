@@ -1,0 +1,101 @@
+# Fill in your name, student ID, and email address in this file.
+# If you are working in a team, fill out the information for both team 
+# members.
+
+# SUBMIT THE LAB ONLY ONCE (from only one partner). This file will be
+# automatically parsed in order to give both team members credit for the
+# lab.
+
+# You need to fill in the EXERCISE sections describing your solutions
+# for Tasks 1, 2, and 3, as well as write the corresponding code.
+# If you did one or more extra credit problems, indicate which one in the
+# appropriate section below (remove the # sign first). If you have any other
+# information you'd like us to know, please add it at the end of the file.
+
+# Partner 1
+Name: Jun Ma
+Student ID: 704149452
+Email: mj.saber1990@gmail.com
+
+# Partner 2 (if you're working in a team)
+# Name: Liyizhi Kou 
+# Student ID: 603941415
+# Email: bolakou@gmail.com
+
+# EXERCISE 1: What method you used to make your peer download and upload
+#    files in parallel?  (~1-3 sentences)
+We use fork to implement parallel. We allow download and upload process run at same time. We set up a MAXCONNPID parameter to limit the total number of child process to prevent from overwhelmimg child processes using up all CPU runtime. If fork reach the MAXCONNPID limitation, it will wait untill any child process end and retry fork. 
+
+# EXERCISE 2A: What conditions did you find and fix that would have
+#    triggered a buffer overrun bug?  (~1-3 sentences each)
+
+Buffer Overrun Bugs
+Download: When you pass in a filename that you want to download, if the filename length is larger than FILENAMESIZ, it will trigger a buffer overrun bug when copy filename to t->filename. To solve it, we check the filename length before it first pass into start_download function, and use strncpy and add terminal byte at the end of t->filename.
+Upload: When you accept an connect and copy the filename you want to upload from task buffer to t->filename, it maybe larger than filename size because it used t->tail as the length. So we add a name length check before copy.
+
+# EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
+#    each)
+
+Only Allow Access to Current Directory
+When I use telnet to connect to peer, I can use GET RPC to get files belong to other directory with syntax like "GET ../answers.txt OSP2P". We blocked it by check '/' within upload filename. If there is a '/', we end the connection.
+
+Deny Super Large File
+If a peer wants to fill up my disk, he would constantly send bytes by infinite loop without terminal byte. To prevent this, I check the t->totle_written, make it less than MAXFILESIZE (1GB, based on my VM setting, for testing I use 2MB).
+
+Deny Very Slow Peer
+We found that sometimes we download files from bad peer with a very low speed. I decide to block these kind of peers. I use a fix size sample array to track last time downloading rate by total_written - last_written and calculate the average rate. If it is less than MINTRANSRATE=32 byte/s, denied that peer.
+
+Popular Tracker
+"Tracker connection closed prematurely!" message comes out because we run out of task buffer. There are 249 fake peers in popular tracker, so to solve this problem, I simply increase the buffer size from 4096 to 8192.
+
+# EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
+#    are they attacks?  (~3-10 sentences each)
+
+Download Attack
+Basiclly our attack is based on flaws we found before. For download attack, when my peer connect to others peer, firstly we try to get a filename which is much larger than FILENAMESIZ, intend to overrun target's buffer. Then we try to build lots of new connections and try to get their ../answers.txt. If target is using parallel, we will consume all their CPU and memory resource if they have no defence mechanism. At last, we will keep attack every one on the peer list. But since we cannot connect to each other, we failed to test these attacks.
+
+Upload Attack
+When someone connects to me, I will send meaningless bytes without terminal byte to them in a infinite loop, in order to consume all their disk.
+
+# Extra credit problems
+#Extra credit problem: yes
+File Integrity
+
+Write a function call calculate_MD5_CODE to calculate a file's MD5
+it is called in register file function and task download function.
+
+one interesting feature we discover from tracker is that:
+if you register a file with a MD5, later on if you changed
+content of the same file, then tracker will not allow you register
+the same file. tracker report error:
+500-The MD5 checksum you provided for this file does not match the checksum
+500-already registered by another peer.
+500 Ignoring your HAVE command.
+
+so, this feature tell us that tracker actually saved a list of 
+registered file with their MD5.
+
+Moreover, if a different peer register a file with same file name,
+it will not report above error.
+
+So, if you want to become a attacker and want to register some
+dangerous file. You have to unregister file first. We did not 
+implement that function.
+
+# Add any other information you'd like us to know below this line.
+Some unknown behavior or bugs we currently have:
+
+TO TEST MD5:
+uncomment line:753-783
+and use run-slow(11113 tracker) command.
+
+
+1. if we comment out MD5 functionality and use run-good,then cat3.jpg is always "no peer is willing to serve". if we manually download only cat1.jpg through cat7.jpg, then still cat3.jpg cannot be served but all others are downloadable.
+
+2. if we have MD5 functionality and use run-slow, everything is good.
+
+3. if we have MD5 functionality and use run-good, then we will meet
+   a memory leak problem after finishing download cat2.jpg. However,
+   if we manually download only cat1.jpg and cat2.jpg, then everything
+   is good.
+
